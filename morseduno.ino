@@ -17,7 +17,7 @@
 
 #define BAUD_RATE 9600 // baud-rate for the serial communication
 
-byte morse_millis[1024]; // array to hold all the timings, stored in multiples of the dot length to save space
+byte morse_millis[1022]; // array to hold all the timings, stored in multiples of the dot length to save space
 unsigned int morse_millis_i = 0;
 unsigned int morse_millis_length = 0;
 
@@ -128,6 +128,24 @@ void do_morse(bool state) {
 	analogWrite(MORSE_PIN_BEEP, state * 127);
 }
 
+// save the current morse-string to EEPROM
+void save_to_EEPROM() {
+	EEPROM.put(0, morse_millis_length);
+
+	for (int i = 0; i < morse_millis_length; i++) {
+		EEPROM.put(i + 2, morse_millis[i]);
+	}
+}
+
+// load the last morse-string from EEPROM
+void load_from_EEPROM() {
+	EEPROM.get(0, morse_millis_length);
+
+	for (int i = 0; i < morse_millis_length; i++) {
+		EEPROM.get(i + 2, morse_millis[i]);
+	}
+}
+
 // the setup function runs once when you press reset or power the board
 void setup() {
 	// Start the serial communication with the specified baudrate
@@ -138,8 +156,7 @@ void setup() {
 	pinMode(MORSE_PIN_BEEP, OUTPUT);
 
 	// retrieve the data from the EEPROM
-	// EEPROM.get(0, morse_millis_length);
-	// EEPROM.get(2, morse_millis);
+	load_from_EEPROM();
 
 	// setup the timer interrupts
 	// disable the interrupts
@@ -147,11 +164,11 @@ void setup() {
 
 	TCCR1A = 0; // Reset entire TC1A register
 	TCCR1B = B00000101; // Reset entire TCCR1B register and set Prescalar = 1024
-	TCNT1 = 0; // Reset Timer 1 value to 0
 
 	TIMSK1 |= B00000010; // Set OCIE1A to 1 so we enable compare match A
 
-	OCR1A = 65535; // set compare register A to this value
+	OCR1A = 10; // set compare register A to 10 so it gets triggered almost instantly
+	TCNT1 = 0; // Reset Timer 1 value to 0
 
 	// re-enable the interrupts
 	sei();
@@ -176,7 +193,7 @@ void serialEvent() {
 				// set the timer one value before the comparater value so it gets triggered with the next clock cycle
 				TCNT1 = OCR1A - 1;
 				
-				// save_to_EEPROM();
+				save_to_EEPROM();
 
 				serial_string_in_progress = false;
 
