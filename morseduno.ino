@@ -10,16 +10,19 @@
  * between two words are 7 dots of silence
  */
 
-#define MESSAGE_REPEAT_DELAY 1 // how many times a full timer run (4.194 seconds) should be waited before the message starts over again
+#define MESSAGE_REPEAT_DELAY 13 // how many dots to be waited before the message starts over again (maximum of 4.194 seconds (= full timer run))
 
 #define MORSE_PIN_LED LED_BUILTIN // pin for visual morsing
 #define MORSE_PIN_BEEP 11 // pin for PWM (audio) morsing
 
 #define BAUD_RATE 9600 // baud-rate for the serial communication
 
-byte morse_millis[1022]; // array to hold all the timings, stored in multiples of the dot length to save space
-unsigned int morse_millis_i = 0;
-unsigned int morse_millis_length = 0;
+char message[1022];
+unsigned int message_i = 0;
+unsigned int message_length = 0;
+
+byte morse_millis[14];
+byte morse_millis_i = 0;
 
 bool serial_string_in_progress = false;
 
@@ -27,96 +30,82 @@ bool serial_string_in_progress = false;
 ISR(TIMER1_COMPA_vect) {
 	TCNT1 = 0; // Reset the timer
 
-	// if the morse_millis counter has reached the end of the array, reset it to the beginning
-	if (morse_millis_i < morse_millis_length) {
-		// if the current entry is zero, increase the counter
-		if (get_morse_millis_factor(morse_millis_i) == 0) {
-			morse_millis_i++;
+	// get the time of the text morse-char
+	OCR1A = 16 * DOT_LENGTH * get_next_morse_millis();
+
+	do_morse(!(morse_millis_i % 2));
+}
+
+byte get_next_morse_millis() {
+	do {
+		morse_millis_i++;
+
+		// if morse_millis reached its maximum, load a new char and reset the counter
+		if (morse_millis_i == 14) {
+
+			load_next_morse_char();
+
+			morse_millis_i = 0;
 		}
+	} while (morse_millis[morse_millis_i] == 0);
 
-		OCR1A = 16 * DOT_LENGTH * get_morse_millis_factor(morse_millis_i);
-
-		do_morse(!(morse_millis_i % 2));
-	} else {
-		OCR1A = 65535;
-
-		if (morse_millis_i == morse_millis_length + MESSAGE_REPEAT_DELAY - 1) {
-			morse_millis_i = -1;
-		} 
-	}
-
-	// increase the counter of the morse_millis-array
-	morse_millis_i++;
+	return morse_millis[morse_millis_i];
 }
 
 /**
- * @brief convert a char into a storage efficient morse-char
+ * @brief load the next morse-char into the morse_millis-array
  * 
- * @param c the char to encode
  */
-void save_char_as_morse(char c) {
-	// if it is a space, handle it directly
-	if (c == ' ') {
-		// save a word-end-char
-		save_morse_millis(0, morse_millis_length);
-		save_morse_millis(3, morse_millis_length + 1);
-		morse_millis_length += 2;
+void load_next_morse_char() {
+	// reset the array
+	for (int i = 0; i< 14; i++) {
+		morse_millis[i] = 0;
+	}
+
+	// if message_i reached the length, send a long pause and start over again
+	if (message_i == message_length) {
+		message_i = 0;
+
+		morse_millis[1] = MESSAGE_REPEAT_DELAY;
 	} else {
-		// if the letter is lower-case, make it uppercase
-		if (c >= 97) {
-			c -= 32;
-		}
+		// if the next char is a space, handle it by itself
+		if (message[message_i] == ' ') {
+			// set the first "off"-slot in the array to the word-distance-delay
+			morse_millis[1] = 7;
+		} else {
+			// get the next morse-code from the header-file
+			unsigned int morse_code = get_morse_char(message[message_i]);
 
-		int morse_code_binary = morse_codes[c - 33];
-		byte len;
-
-		while (morse_code_binary > 0) {
-			len = ceil(log(morse_code_binary + 1) / M_LN2);
-
-			// if the right-boolean of the active pair is 1, it is a dash
-			if (morse_code_binary >> (len - 2) & 1) {
-				save_morse_millis(2, morse_millis_length);
-			} else { // else store a dot
-				save_morse_millis(1, morse_millis_length);
+			// length of the morse-char
+			byte len = ceil(log(morse_code) / M_LN2);
+			
+			for (byte i = 0; i < len; i += 2) {
+				morse_millis[i] = (1 & (morse_code >> (len - i - 2)) )* 2 + 1; // * 2 + 1 converts from 0/1 value to 1/3 value
+				morse_millis[i + 1] = 1; // create a dot-long pause after the morse
 			}
-			// store the pause between two chars
-			save_morse_millis(1, morse_millis_length + 1);
-			morse_millis_length += 2;
 
-			morse_code_binary -= morse_code_binary & (0b11 << (len - 2));
+			morse_millis[len - 1] = 3; // set the pause between individual chars
 		}
-		// save a between chars char
-		save_morse_millis(0, morse_millis_length);
-		save_morse_millis(2, morse_millis_length + 1);
-		morse_millis_length += 2;
+
+		message_i++;
 	}
 }
 
-/**
- * @brief store a lenght factor of a morse char in the morse_millis-array
- * 
- * @param length the length-factor of the morse-char (encoded as: 0b00 --> 0, 0b01 --> dot, 0b10 --> 3 dots, 0b11 --> 7 dots)
- * @param pos the position in the array
- */
-void save_morse_millis(byte length, int pos) {
-	morse_millis[pos / 4] |= length << (pos % 4) * 2;
+// retrieves the mrose_code from the header-file identified by the char
+int get_morse_char(char c) {
+	// if the letter is lower-case, make it uppercase
+	if (c >= 97) {
+		c -= 32;
+	}
+
+	return morse_codes[c - 33];
 }
 
-byte get_morse_millis_factor(int pos) {
-	switch ((morse_millis[pos / 4] >> (pos % 4) * 2) & 0b11) {
-		case 0:
-			return 0;
-			break;
-		case 1:
-			return 1;
-			break;
-		case 2:
-			return 3;
-			break;
-		case 3:
-			return 7;
-			break;
-	}
+// save a char to the message array
+void add_char_to_message(char c) {
+	message[message_length] = c;
+
+	message_length++;
 }
 
 // controls the GPIO-output for morsing signals
@@ -128,22 +117,16 @@ void do_morse(bool state) {
 	analogWrite(MORSE_PIN_BEEP, state * 127);
 }
 
-// save the current morse-string to EEPROM
-void save_to_EEPROM() {
-	EEPROM.put(0, morse_millis_length);
-
-	for (int i = 0; i < morse_millis_length; i++) {
-		EEPROM.put(i + 2, morse_millis[i]);
-	}
+// save the length of the message to the EEPROM
+void save_to_eeprom() {
+	EEPROM.put(0, message_length);
+	EEPROM.put(2, message);
 }
 
 // load the last morse-string from EEPROM
 void load_from_EEPROM() {
-	EEPROM.get(0, morse_millis_length);
-
-	for (int i = 0; i < morse_millis_length; i++) {
-		EEPROM.get(i + 2, morse_millis[i]);
-	}
+	EEPROM.get(0, message_length);
+	EEPROM.get(2, message);
 }
 
 // the setup function runs once when you press reset or power the board
@@ -154,6 +137,8 @@ void setup() {
 	// initialize digital pin LED_BUILTIN as an output.
 	pinMode(MORSE_PIN_LED, OUTPUT);
 	pinMode(MORSE_PIN_BEEP, OUTPUT);
+
+	delay(2000);
 
 	// retrieve the data from the EEPROM
 	load_from_EEPROM();
@@ -188,14 +173,14 @@ void serialEvent() {
 			case 10:
 			case 13:
 				// reset the running counter to the beginning
-				morse_millis_i = 0;
+				message_i = 0;
 
 				// set the timer one value before the comparater value so it gets triggered with the next clock cycle
 				TCNT1 = OCR1A - 1;
-				
-				save_to_EEPROM();
 
 				serial_string_in_progress = false;
+
+				save_to_eeprom();
 
 				break;
 			default:
@@ -203,9 +188,10 @@ void serialEvent() {
 				if (!serial_string_in_progress) {
 					serial_string_in_progress = true;
 
-					morse_millis_length = 0;
+					message_length = 0;
 				}
-				save_char_as_morse (c);
+				
+				add_char_to_message (c);
 
 				break;
 		}
