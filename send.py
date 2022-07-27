@@ -1,5 +1,4 @@
 import time
-from socket import timeout
 import serial
 import serial.tools.list_ports
 from consolemenu import *

@@ -17,3 +17,12 @@ if (c >= 97) {
 
 c -= 33
 ```
+
+## Building
+### Python
+To build the python CLI-client, you need to have `pyinstaller`. You can get it with
+```
+pip install pyinstaller
+```
+or over your package-manager.
+

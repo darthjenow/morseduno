@@ -4,7 +4,8 @@
 
 #include "Morsecodes.h"
 
-#define DOT_LENGTH 300 // length of a dot in milli seconds
+#define DOT_LENGTH_MIN 100 // minimal length of a dot in milli seconds
+#define DOT_LENGTH_MAX 900 // maximal length of a dot in milli seconds
 /**
  * a dash ist 3 dots long
  * between two chars are 3 dots of silence
@@ -13,9 +14,10 @@
 
 #define MESSAGE_REPEAT_DELAY 13 // how many dots to be waited before the message starts over again (maximum of 4.194 seconds (= full timer run))
 
-#define MORSE_PIN_LED LED_BUILTIN // pin for visual morsing
-#define MORSE_PIN_BEEP 11 // pin for PWM (audio) morsing
-#define MORSE_ENABLE 12 // enables or disables the morsing
+#define MORSE_PIN_LED 8 // pin for visual morsing
+#define MORSE_PIN_BEEP 3 // pin for PWM (audio) morsing
+#define MORSE_ENABLE 2 // enables or disables the morsing
+#define DOT_LENGTH_READ A7
 
 #define BAUD_RATE 9600 // baud-rate for the serial communication
 
@@ -35,7 +37,9 @@ ISR(TIMER1_COMPA_vect) {
 	TCNT1 = 0; // Reset the timer
 
 	// get the time of the text morse-char
-	OCR1A = 16 * DOT_LENGTH * get_next_morse_millis();
+	OCR1A = 16 * (DOT_LENGTH_MIN + (DOT_LENGTH_MAX - DOT_LENGTH_MIN) / 1023.0 * analogRead(DOT_LENGTH_READ)) * get_next_morse_millis();
+
+	Serial.println(DOT_LENGTH_MIN + (DOT_LENGTH_MAX - DOT_LENGTH_MIN) / 1023.0 * analogRead(DOT_LENGTH_READ));
 
 	do_morse(!(morse_millis_i % 2));
 }
@@ -132,7 +136,7 @@ void do_morse(bool state) {
 	digitalWrite(MORSE_PIN_LED, state);
 
 	// toggle the PWM-signal with 50% pulse width
-	analogWrite(MORSE_PIN_BEEP, state * 127);
+	digitalWrite(MORSE_PIN_BEEP, state);
 }
 
 /**
@@ -185,8 +189,8 @@ void setup() {
 	pinMode(MORSE_PIN_LED, OUTPUT);
 	pinMode(MORSE_PIN_BEEP, OUTPUT);
 
-	// initialize the toggle-switch with debouncing
-	morse_enable_bounce.attach(MORSE_ENABLE, INPUT_PULLUP);
+	// initialize the toggle-switch
+	morse_enable_bounce.attach(MORSE_ENABLE, INPUT);
 	morse_enable_bounce.interval(5);
 
 	delay(1000);
@@ -199,8 +203,15 @@ void setup() {
 	cli();
 
 	TCCR1A = 0; // Reset entire TC1A register
-	// morse_enable(true); // enable the timer
-	TCCR1B = B00000101;
+	// morse_enable(morse_enable_bounce.read()); // enable the timer
+
+	morse_enable_bounce.update();
+
+	if (morse_enable_bounce.read()) {
+		TCCR1B = B00000101; // enable the timer
+	} else {
+		TCCR1B = B00000000; // disable the timer
+	}
 
 	TIMSK1 |= B00000010; // Set OCIE1A to 1 so we enable compare match A
 
@@ -209,6 +220,20 @@ void setup() {
 
 	// re-enable the interrupts
 	sei();
+
+	// morse_enable_bounce.update();
+
+	// Serial.println(morse_enable_bounce.read());
+
+	// // if (morse_enable_bounce.read() == false) {
+	// // 	morse_enable(false);
+	// // }
+
+	// morse_enable(morse_enable_bounce.read());
+
+	if (!morse_enable_bounce.read()) {
+		morse_enable(false);
+	}
 }
 
 void loop() {
