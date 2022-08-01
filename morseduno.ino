@@ -39,8 +39,6 @@ ISR(TIMER1_COMPA_vect) {
 	// get the time of the text morse-char
 	OCR1A = 16 * (DOT_LENGTH_MIN + (DOT_LENGTH_MAX - DOT_LENGTH_MIN) / 1023.0 * analogRead(DOT_LENGTH_READ)) * get_next_morse_millis();
 
-	Serial.println(DOT_LENGTH_MIN + (DOT_LENGTH_MAX - DOT_LENGTH_MIN) / 1023.0 * analogRead(DOT_LENGTH_READ));
-
 	do_morse(!(morse_millis_i % 2));
 }
 
@@ -220,16 +218,6 @@ void setup() {
 
 	// re-enable the interrupts
 	sei();
-
-	// morse_enable_bounce.update();
-
-	// Serial.println(morse_enable_bounce.read());
-
-	// // if (morse_enable_bounce.read() == false) {
-	// // 	morse_enable(false);
-	// // }
-
-	// morse_enable(morse_enable_bounce.read());
 
 	if (!morse_enable_bounce.read()) {
 		morse_enable(false);
