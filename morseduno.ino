@@ -4,6 +4,17 @@
 
 #include "Morsecodes.h"
 
+// uncomment this define to enable debugging over the serial port
+// #define SERIAL_DEBUG
+
+#ifdef SERIAL_DEBUG
+	#define DEBUG_PRINT(x) Serial.print(x)
+	#define DEBUG_PRINTLN(x) Serial.println(x)
+#else
+	#define DEBUG_PRINT(x) do {} while (0)
+	#define DEBUG_PRINTLN(x) do {} while (0)
+#endif
+
 #define DOT_LENGTH_MIN 100 // minimal length of a dot in milli seconds
 #define DOT_LENGTH_MAX 900 // maximal length of a dot in milli seconds
 /**
@@ -49,12 +60,26 @@ byte get_next_morse_millis() {
 
 		// if morse_millis reached its maximum, load a new char and reset the counter
 		if (morse_millis_i == 14) {
+			DEBUG_PRINT(' ');
 
 			load_next_morse_char();
 
 			morse_millis_i = 0;
 		}
 	} while (morse_millis[morse_millis_i] == 0);
+	
+	if (morse_millis_i % 2 == 0) {
+		switch(morse_millis[morse_millis_i]) {
+			case 1:
+				DEBUG_PRINT('.');
+				break;
+			case 3:
+				DEBUG_PRINT('-');
+				break;
+			default:
+				break;
+		}
+	}
 
 	return morse_millis[morse_millis_i];
 }
@@ -74,18 +99,26 @@ void load_next_morse_char() {
 		message_i = 0;
 
 		morse_millis[1] = MESSAGE_REPEAT_DELAY;
+
+		DEBUG_PRINTLN();
 	} else {
 		// if the next char is a space, handle it by itself
 		if (message[message_i] == ' ') {
 			// set the first "off"-slot in the array to the word-distance-delay
 			morse_millis[1] = 7;
+
 		} else {
 			// get the next morse-code from the header-file
 			unsigned int morse_code = get_morse_char(message[message_i]);
 
 			// length of the morse-char
-			byte len = ceil(log(morse_code) / M_LN2);
-			
+			byte len = 0;
+			if (morse_code == 0b0) {
+				len = 2;
+			} else {
+				len = ceil(log(morse_code) / M_LN2 + 0.005);
+			}
+
 			for (byte i = 0; i < len; i += 2) {
 				morse_millis[i] = (1 & (morse_code >> (len - i - 2)) )* 2 + 1; // * 2 + 1 converts from 0/1 value to 1/3 value
 				morse_millis[i + 1] = 1; // create a dot-long pause after the morse
@@ -144,6 +177,8 @@ void do_morse(bool state) {
 void save_to_eeprom() {
 	EEPROM.put(0, message_length);
 	EEPROM.put(2, message);
+
+	serial_print_message();
 }
 
 /**
@@ -153,6 +188,19 @@ void save_to_eeprom() {
 void load_from_EEPROM() {
 	EEPROM.get(0, message_length);
 	EEPROM.get(2, message);
+
+	serial_print_message();
+}
+
+/**
+ * @brief output the current message to the serial console
+ * 
+ */
+void serial_print_message() {
+	for (int i = 0; i < message_length; i++) {
+		DEBUG_PRINT(message[i]);
+	}
+	DEBUG_PRINTLN();
 }
 
 void morse_enable(bool state) {
