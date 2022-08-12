@@ -18,11 +18,16 @@ if (c >= 97) {
 c -= 33
 ```
 
-## Building
-### Python
-To build the python CLI-client, you need to have `pyinstaller`. You can get it with
-```
-pip install pyinstaller
-```
-or over your package-manager.
+## Storing Messages
+Messages can be sent to the *Morseduno* over serial (Baudrate = 9600).
+You can use any serial terminal, for exaple the one in the Arduino IDE or alternatively you can use the included *send.py* utility.
+The requirements are:
+- pyserial
+- console-menu
+- configparser
 
+### Building
+You can also build it into a universal executable with `pyinstaller`:
+```
+pyintaller send.py
+```

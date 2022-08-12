@@ -53,15 +53,13 @@ ISR(TIMER1_COMPA_vect) {
 	do_morse(!(morse_millis_i % 2));
 }
 
+// returns the millis for the next morse char
 byte get_next_morse_millis() {
-
 	do {
 		morse_millis_i++;
 
 		// if morse_millis reached its maximum, load a new char and reset the counter
 		if (morse_millis_i == 14) {
-			DEBUG_PRINT(' ');
-
 			load_next_morse_char();
 
 			morse_millis_i = 0;
@@ -107,6 +105,7 @@ void load_next_morse_char() {
 			// set the first "off"-slot in the array to the word-distance-delay
 			morse_millis[1] = 7;
 
+			DEBUG_PRINT(" / ");
 		} else {
 			// get the next morse-code from the header-file
 			unsigned int morse_code = get_morse_char(message[message_i]);
@@ -125,6 +124,8 @@ void load_next_morse_char() {
 			}
 
 			morse_millis[len - 1] = 3; // set the pause between individual chars
+
+			DEBUG_PRINT(' ');
 		}
 
 		message_i++;
@@ -205,6 +206,11 @@ void serial_print_message() {
 
 void morse_enable(bool state) {
 	if (state) {
+		message_i = 0;
+		morse_millis_i = -1;
+
+		load_next_morse_char();
+
 		// restart the timer
 		TCCR1B |= B00000101;
 
@@ -214,12 +220,6 @@ void morse_enable(bool state) {
 
 		//immidiately turn all the output off
 		do_morse(false);
-
-		// reset the counters
-		message_i = 0;
-		morse_millis_i = -1;
-
-		load_next_morse_char(); // load the first char into the buffer
 	}
 }
 
